@@ -26,7 +26,9 @@ app.get("/api/health", (req, res) => {
   res.json({
     status: "online",
     app: "AralAI",
-    provider: "Gemini"
+    provider: "Gemini",
+    geminiConfigured: Boolean(GEMINI_API_KEY),
+    model: GEMINI_MODEL
   });
 });
 
@@ -88,7 +90,10 @@ app.post("/api/chat", async (req, res) => {
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("Gemini API error:", data.error?.message || response.status);
+      console.error(
+        "Gemini API error:",
+        data.error?.message || response.status
+      );
 
       return res.status(response.status).json({
         error: data.error?.message || "Gemini API request failed."
