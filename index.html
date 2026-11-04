@@ -1,0 +1,127 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#090812">
+  <title>AralAI - Your Study Assistant</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div class="app">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-icon">A</div>
+        <span>Aral<span class="purple">AI</span></span>
+      </div>
+
+      <button class="new-chat" id="newChatBtn">
+        <span>＋</span> New Chat
+      </button>
+
+      <div class="history-title">RECENT CHATS</div>
+      <div class="history-list" id="historyList">
+        <p class="empty-history">No conversations yet</p>
+      </div>
+
+      <div class="sidebar-bottom">
+        <div class="profile">
+          <div class="avatar">A</div>
+          <div>
+            <strong>Student</strong>
+            <small>AralAI Assistant</small>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main">
+
+      <header class="topbar">
+        <button class="menu-btn" id="menuBtn">☰</button>
+        <div class="mobile-brand">Aral<span class="purple">AI</span></div>
+        <span class="version">V1.0</span>
+      </header>
+
+      <section class="chat-container">
+
+        <div class="welcome" id="welcome">
+          <div class="welcome-logo">A</div>
+          <h1>Welcome to <span class="purple">AralAI</span></h1>
+          <p>Your AI study companion. Learn smarter, not harder.</p>
+
+          <div class="suggestions">
+            <button class="suggestion" data-prompt="Explain photosynthesis in simple words.">
+              <span>🌱</span>
+              <div>
+                <strong>Explain a lesson</strong>
+                <small>Understand difficult topics</small>
+              </div>
+            </button>
+
+            <button class="suggestion" data-prompt="Create a 10-question science quiz with answers.">
+              <span>📝</span>
+              <div>
+                <strong>Create a quiz</strong>
+                <small>Practice your knowledge</small>
+              </div>
+            </button>
+
+            <button class="suggestion" data-prompt="Give me a short summary about the importance of education.">
+              <span>📚</span>
+              <div>
+                <strong>Summarize a topic</strong>
+                <small>Make lessons easier to review</small>
+              </div>
+            </button>
+
+            <button class="suggestion" data-prompt="Help me solve a math problem step by step.">
+              <span>🧮</span>
+              <div>
+                <strong>Math assistant</strong>
+                <small>Learn step by step</small>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <div class="messages" id="messages"></div>
+
+        <div class="typing" id="typing" hidden>
+          <span></span><span></span><span></span>
+          AralAI is thinking...
+        </div>
+
+      </section>
+
+      <!-- MESSAGE INPUT -->
+      <footer class="composer-area">
+        <form class="composer" id="chatForm">
+          <textarea
+            id="messageInput"
+            placeholder="Ask AralAI anything..."
+            rows="1"
+            required
+          ></textarea>
+
+          <button type="submit" id="sendBtn" aria-label="Send message">
+            ➤
+          </button>
+        </form>
+
+        <p class="disclaimer">
+          AralAI can make mistakes. Always check important information.
+        </p>
+      </footer>
+
+    </main>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
