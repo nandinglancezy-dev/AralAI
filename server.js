@@ -11,16 +11,88 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
 const SYSTEM_PROMPT = `
 You are AralAI, a friendly Filipino AI study assistant.
-Help students understand lessons in Math, Science,
-English, Filipino, and other school subjects.
+Help students with Mathematics, Science, English,
+Filipino, History, Technology, and other school subjects.
 Explain clearly using simple Filipino or English.
-Give step-by-step explanations when useful.
+Give step-by-step explanations and examples when useful.
 Be accurate, patient, respectful, and encouraging.
 `;
+
+const wait = ms =>
+  new Promise(resolve => setTimeout(resolve, ms));
+
+async function askGemini(contents) {
+  const maxAttempts = 3;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let response;
+    let data;
+
+    try {
+      response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": GEMINI_API_KEY
+          },
+          body: JSON.stringify({
+            systemInstruction: {
+              parts: [{ text: SYSTEM_PROMPT }]
+            },
+            contents,
+            generationConfig: {
+              maxOutputTokens: 2048
+            }
+          })
+        }
+      );
+
+      data = await response.json();
+
+    } catch (error) {
+      console.error("Gemini network error:", error.message);
+      throw new Error("Hindi makakonekta sa Gemini server.");
+    }
+
+    if (response.ok) return data;
+
+    const status = response.status;
+    const message = data.error?.message || "Unknown Gemini API error";
+
+    console.error("Gemini API error:", {
+      status,
+      message,
+      model: GEMINI_MODEL,
+      attempt
+    });
+
+    if (status === 400 || status === 401 || status === 403) {
+      throw new Error(
+        `Gemini API error ${status}: ${message}`
+      );
+    }
+
+    if (attempt === maxAttempts) {
+      if (status === 429) {
+        throw new Error(
+          "Gemini quota limit o mataas ang demand. Subukan mamaya."
+        );
+      }
+
+      throw new Error(
+        `Gemini server error ${status}: ${message}`
+      );
+    }
+
+    await wait(2000 * attempt);
+  }
+}
 
 app.get("/api/health", (req, res) => {
   res.json({
@@ -28,7 +100,8 @@ app.get("/api/health", (req, res) => {
     app: "AralAI",
     provider: "Gemini",
     geminiConfigured: Boolean(GEMINI_API_KEY),
-    model: GEMINI_MODEL
+    model: GEMINI_MODEL,
+    version: "1.2"
   });
 });
 
@@ -60,45 +133,16 @@ app.post("/api/chat", async (req, res) => {
         parts: [{ text: message.content.slice(0, 10000) }]
       }));
 
-    if (!contents.length || contents[contents.length - 1].role !== "user") {
+    if (
+      !contents.length ||
+      contents[contents.length - 1].role !== "user"
+    ) {
       return res.status(400).json({
         error: "Please send a valid user message."
       });
     }
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": GEMINI_API_KEY
-        },
-        body: JSON.stringify({
-          systemInstruction: {
-            parts: [{ text: SYSTEM_PROMPT }]
-          },
-          contents,
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 2048
-          }
-        })
-      }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error(
-        "Gemini API error:",
-        data.error?.message || response.status
-      );
-
-      return res.status(response.status).json({
-        error: data.error?.message || "Gemini API request failed."
-      });
-    }
+    const data = await askGemini(contents);
 
     const reply = data.candidates?.[0]?.content?.parts
       ?.map(part => part.text || "")
@@ -107,21 +151,21 @@ app.post("/api/chat", async (req, res) => {
 
     if (!reply) {
       return res.status(502).json({
-        error: "Gemini returned an empty response. Please try again."
+        error: "Gemini returned an empty response."
       });
     }
 
-    res.json({ reply });
+    return res.json({ reply });
 
   } catch (error) {
-    console.error("AralAI server error:", error.message);
+    console.error("AralAI error:", error.message);
 
-    res.status(500).json({
-      error: "Unable to connect to Gemini right now. Please try again."
+    return res.status(502).json({
+      error: error.message
     });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`AralAI Gemini server running on port ${PORT}`);
+  console.log(`AralAI V1.2 running on port ${PORT}`);
 });
