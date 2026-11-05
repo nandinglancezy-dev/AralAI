@@ -12,7 +12,6 @@
 
   <div class="app">
 
-    <!-- SIDEBAR -->
     <aside class="sidebar" id="sidebar">
       <div class="brand">
         <div class="brand-icon">A</div>
@@ -29,6 +28,12 @@
       </div>
 
       <div class="sidebar-bottom">
+
+        <button class="settings-btn" id="settingsBtn">
+          <span>⚙️</span>
+          <span>Settings</span>
+        </button>
+
         <div class="profile">
           <div class="avatar">A</div>
           <div>
@@ -36,16 +41,16 @@
             <small>AralAI Assistant</small>
           </div>
         </div>
+
       </div>
     </aside>
 
-    <!-- MAIN CONTENT -->
     <main class="main">
 
       <header class="topbar">
         <button class="menu-btn" id="menuBtn">☰</button>
         <div class="mobile-brand">Aral<span class="purple">AI</span></div>
-        <span class="version">V1.0</span>
+        <span class="version">V1.6</span>
       </header>
 
       <section class="chat-container">
@@ -56,6 +61,7 @@
           <p>Your AI study companion. Learn smarter, not harder.</p>
 
           <div class="suggestions">
+
             <button class="suggestion" data-prompt="Explain photosynthesis in simple words.">
               <span>🌱</span>
               <div>
@@ -87,6 +93,7 @@
                 <small>Learn step by step</small>
               </div>
             </button>
+
           </div>
         </div>
 
@@ -99,7 +106,6 @@
 
       </section>
 
-      <!-- MESSAGE INPUT -->
       <footer class="composer-area">
         <form class="composer" id="chatForm">
           <textarea
@@ -122,6 +128,53 @@
     </main>
   </div>
 
+  <!-- SETTINGS MODAL -->
+  <div class="settings-overlay" id="settingsOverlay" hidden>
+    <div class="settings-modal">
+      <div class="settings-header">
+        <h2>⚙️ Settings</h2>
+        <button id="closeSettingsBtn" aria-label="Close settings">×</button>
+      </div>
+
+      <a
+        class="contact-developer"
+        href="https://www.facebook.com/share/19btkHYhoa/"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <span class="facebook-icon">f</span>
+        <span>
+          <strong>Contact Developer</strong>
+          <small>Connect with the AralAI developer</small>
+        </span>
+        <span class="contact-arrow">›</span>
+      </a>
+
+    </div>
+  </div>
+
   <script src="script.js"></script>
+
+  <script>
+    const settingsBtn = document.getElementById("settingsBtn");
+    const settingsOverlay = document.getElementById("settingsOverlay");
+    const closeSettingsBtn = document.getElementById("closeSettingsBtn");
+
+    settingsBtn.addEventListener("click", () => {
+      settingsOverlay.hidden = false;
+      document.getElementById("sidebar").classList.remove("open");
+    });
+
+    closeSettingsBtn.addEventListener("click", () => {
+      settingsOverlay.hidden = true;
+    });
+
+    settingsOverlay.addEventListener("click", event => {
+      if (event.target === settingsOverlay) {
+        settingsOverlay.hidden = true;
+      }
+    });
+  </script>
+
 </body>
 </html>
