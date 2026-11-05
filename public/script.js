@@ -10,18 +10,52 @@ const historyList = document.getElementById("historyList");
 const menuBtn = document.getElementById("menuBtn");
 const sidebar = document.getElementById("sidebar");
 
-let conversations = JSON.parse(
-  localStorage.getItem("aralai_chats") || "[]"
-);
+const STORAGE_KEY = "aralai_chats";
+const MAX_CHATS = 50;
+const MAX_MESSAGES = 100;
 
+function loadHistory() {
+  try {
+    const saved = JSON.parse(
+      localStorage.getItem(STORAGE_KEY) || "[]"
+    );
+
+    return Array.isArray(saved)
+      ? saved.filter(chat =>
+          chat &&
+          typeof chat.id === "string" &&
+          Array.isArray(chat.messages)
+        )
+      : [];
+  } catch (error) {
+    console.error("Memory loading error:", error);
+    return [];
+  }
+}
+
+let conversations = loadHistory();
 let currentChatId = null;
 let isSending = false;
 
-// SAVE HISTORY
+// SAVE MEMORY
 function saveHistory() {
-  localStorage.setItem(
-    "aralai_chats",
-    JSON.stringify(conversations)
+  try {
+    conversations = conversations.slice(0, MAX_CHATS);
+
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(conversations)
+    );
+  } catch (error) {
+    console.error("Memory saving error:", error);
+    alert("Storage is full. Please delete some old conversations.");
+  }
+}
+
+// CURRENT CHAT
+function getCurrentChat() {
+  return conversations.find(
+    chat => chat.id === currentChatId
   );
 }
 
@@ -31,17 +65,9 @@ function newChat() {
   messages.innerHTML = "";
   welcome.hidden = false;
   messageInput.value = "";
-  messageInput.focus();
   renderHistory();
 
   sidebar.classList.remove("open");
-}
-
-// GET CURRENT CHAT
-function getCurrentChat() {
-  return conversations.find(
-    chat => chat.id === currentChatId
-  );
 }
 
 // CREATE CHAT
@@ -49,7 +75,8 @@ function createChat(firstMessage) {
   const chat = {
     id: Date.now().toString(),
     title: firstMessage.slice(0, 35),
-    messages: []
+    messages: [],
+    updatedAt: new Date().toISOString()
   };
 
   conversations.unshift(chat);
@@ -61,7 +88,7 @@ function createChat(firstMessage) {
   return chat;
 }
 
-// ADD MESSAGE TO CHAT
+// ADD MESSAGE
 function addMessage(role, content) {
   const chat = getCurrentChat();
 
@@ -69,8 +96,12 @@ function addMessage(role, content) {
 
   chat.messages.push({
     role,
-    content
+    content,
+    time: new Date().toISOString()
   });
+
+  chat.messages = chat.messages.slice(-MAX_MESSAGES);
+  chat.updatedAt = new Date().toISOString();
 
   saveHistory();
 }
@@ -126,14 +157,13 @@ function displayMessage(role, content) {
 
   message.appendChild(avatar);
   message.appendChild(messageContent);
-
   messages.appendChild(message);
 
-  document.querySelector(".chat-container").scrollTop =
-    document.querySelector(".chat-container").scrollHeight;
+  const container = document.querySelector(".chat-container");
+  container.scrollTop = container.scrollHeight;
 }
 
-// RENDER CHAT HISTORY
+// RENDER HISTORY
 function renderHistory() {
   historyList.innerHTML = "";
 
@@ -155,22 +185,20 @@ function renderHistory() {
     title.className = "history-name";
     title.textContent = chat.title;
 
-    title.addEventListener("click", () => {
-      openChat(chat.id);
-    });
+    title.addEventListener("click", () => openChat(chat.id));
 
     const deleteBtn = document.createElement("button");
     deleteBtn.className = "delete-chat";
     deleteBtn.textContent = "×";
     deleteBtn.title = "Delete conversation";
 
-    deleteBtn.addEventListener("click", (event) => {
+    deleteBtn.addEventListener("click", event => {
       event.stopPropagation();
 
       if (!confirm("Delete this conversation?")) return;
 
       conversations = conversations.filter(
-        item => item.id !== chat.id
+        chatItem => chatItem.id !== chat.id
       );
 
       if (currentChatId === chat.id) {
@@ -186,9 +214,7 @@ function renderHistory() {
     item.appendChild(title);
     item.appendChild(deleteBtn);
 
-    item.addEventListener("click", () => {
-      openChat(chat.id);
-    });
+    item.addEventListener("click", () => openChat(chat.id));
 
     historyList.appendChild(item);
   });
@@ -217,7 +243,6 @@ async function sendMessage(text) {
   if (isSending) return;
 
   text = text.trim();
-
   if (!text) return;
 
   if (!currentChatId) {
@@ -232,11 +257,10 @@ async function sendMessage(text) {
 
   messageInput.value = "";
   messageInput.style.height = "auto";
-
   typing.hidden = false;
 
-  const chatContainer = document.querySelector(".chat-container");
-  chatContainer.scrollTop = chatContainer.scrollHeight;
+  const container = document.querySelector(".chat-container");
+  container.scrollTop = container.scrollHeight;
 
   try {
     const chat = getCurrentChat();
@@ -247,7 +271,15 @@ async function sendMessage(text) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        messages: chat.messages.slice(-20)
+        messages: chat.messages
+          .filter(m =>
+            ["user", "assistant"].includes(m.role)
+          )
+          .slice(-20)
+          .map(m => ({
+            role: m.role,
+            content: m.content
+          }))
       })
     });
 
@@ -288,14 +320,13 @@ chatForm.addEventListener("submit", event => {
   sendMessage(messageInput.value);
 });
 
-// NEW CHAT BUTTON
+// NEW CHAT
 newChatBtn.addEventListener("click", newChat);
 
-// SUGGESTION BUTTONS
+// SUGGESTIONS
 document.querySelectorAll(".suggestion").forEach(button => {
   button.addEventListener("click", () => {
-    const prompt = button.dataset.prompt;
-    sendMessage(prompt);
+    sendMessage(button.dataset.prompt);
   });
 });
 
@@ -304,7 +335,7 @@ menuBtn.addEventListener("click", () => {
   sidebar.classList.toggle("open");
 });
 
-// AUTO RESIZE INPUT
+// AUTO RESIZE
 messageInput.addEventListener("input", () => {
   messageInput.style.height = "auto";
   messageInput.style.height =
@@ -319,5 +350,15 @@ messageInput.addEventListener("keydown", event => {
   }
 });
 
-// INITIALIZE
-renderHistory();
+// RESTORE LAST CONVERSATION
+function initializeApp() {
+  renderHistory();
+
+  if (conversations.length > 0) {
+    openChat(conversations[0].id);
+  }
+}
+
+// START
+initializeApp();
+    
