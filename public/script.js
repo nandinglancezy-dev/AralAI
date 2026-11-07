@@ -14,6 +14,14 @@ const STORAGE_KEY = "aralai_chats";
 const MAX_CHATS = 50;
 const MAX_MESSAGES = 100;
 
+let conversations = loadHistory();
+let currentChatId = null;
+let isSending = false;
+
+// ==============================
+// CONVERSATION MEMORY
+// ==============================
+
 function loadHistory() {
   try {
     const saved = JSON.parse(
@@ -33,11 +41,6 @@ function loadHistory() {
   }
 }
 
-let conversations = loadHistory();
-let currentChatId = null;
-let isSending = false;
-
-// SAVE MEMORY
 function saveHistory() {
   try {
     conversations = conversations.slice(0, MAX_CHATS);
@@ -52,25 +55,12 @@ function saveHistory() {
   }
 }
 
-// CURRENT CHAT
 function getCurrentChat() {
   return conversations.find(
     chat => chat.id === currentChatId
   );
 }
 
-// CREATE NEW CHAT
-function newChat() {
-  currentChatId = null;
-  messages.innerHTML = "";
-  welcome.hidden = false;
-  messageInput.value = "";
-  renderHistory();
-
-  sidebar.classList.remove("open");
-}
-
-// CREATE CHAT
 function createChat(firstMessage) {
   const chat = {
     id: Date.now().toString(),
@@ -88,7 +78,6 @@ function createChat(firstMessage) {
   return chat;
 }
 
-// ADD MESSAGE
 function addMessage(role, content) {
   const chat = getCurrentChat();
 
@@ -106,12 +95,236 @@ function addMessage(role, content) {
   saveHistory();
 }
 
+// ==============================
+// MARKDOWN FORMATTER
+// ==============================
+
+function escapeHTML(value) {
+  return String(value).replace(/[&<>"']/g, char => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[char]);
+}
+
+function formatInline(text) {
+  let html = escapeHTML(text);
+
+  html = html.replace(
+    /`([^`]+)`/g,
+    "<code>$1</code>"
+  );
+
+  html = html.replace(
+    /\*\*(.+?)\*\*/g,
+    "<strong>$1</strong>"
+  );
+
+  html = html.replace(
+    /__(.+?)__/g,
+    "<strong>$1</strong>"
+  );
+
+  html = html.replace(
+    /(?<!\*)\*([^*\n]+)\*(?!\*)/g,
+    "<em>$1</em>"
+  );
+
+  html = html.replace(
+    /~~(.+?)~~/g,
+    "<del>$1</del>"
+  );
+
+  return html;
+}
+
+function isTableSeparator(line) {
+  return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+}
+
+function splitTableRow(line) {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map(cell => cell.trim());
+}
+
+function formatMarkdown(content) {
+  const lines = String(content).replace(/\r/g, "").split("\n");
+  const output = [];
+
+  let paragraph = [];
+  let listType = null;
+  let listItems = [];
+  let index = 0;
+
+  function flushParagraph() {
+    if (!paragraph.length) return;
+
+    output.push(
+      "<p>" +
+      paragraph.map(formatInline).join("<br>") +
+      "</p>"
+    );
+
+    paragraph = [];
+  }
+
+  function flushList() {
+    if (!listItems.length) return;
+
+    const tag = listType === "ol" ? "ol" : "ul";
+
+    output.push(
+      "<" + tag + ">" +
+      listItems.map(item =>
+        "<li>" + formatInline(item) + "</li>"
+      ).join("") +
+      "</" + tag + ">"
+    );
+
+    listItems = [];
+    listType = null;
+  }
+
+  while (index < lines.length) {
+    const line = lines[index];
+    const trimmed = line.trim();
+
+    // Empty lines
+    if (!trimmed) {
+      flushParagraph();
+      flushList();
+      index++;
+      continue;
+    }
+
+    // Markdown table
+    if (
+      trimmed.includes("|") &&
+      index + 1 < lines.length &&
+      isTableSeparator(lines[index + 1])
+    ) {
+      flushParagraph();
+      flushList();
+
+      const headers = splitTableRow(line);
+      index += 2;
+
+      let rows = "";
+
+      while (
+        index < lines.length &&
+        lines[index].trim().includes("|")
+      ) {
+        const cells = splitTableRow(lines[index]);
+
+        rows += "<tr>" + headers.map((_, i) =>
+          "<td>" + formatInline(cells[i] || "") + "</td>"
+        ).join("") + "</tr>";
+
+        index++;
+      }
+
+      output.push(
+        '<div class="aralai-table-wrap">' +
+        '<table class="aralai-table">' +
+        "<thead><tr>" +
+        headers.map(header =>
+          "<th>" + formatInline(header) + "</th>"
+        ).join("") +
+        "</tr></thead>" +
+        "<tbody>" + rows + "</tbody>" +
+        "</table></div>"
+      );
+
+      continue;
+    }
+
+    // Headings
+    const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
+
+    if (heading) {
+      flushParagraph();
+      flushList();
+
+      const level = heading[1].length;
+
+      output.push(
+        "<h" + level + ">" +
+        formatInline(heading[2]) +
+        "</h" + level + ">"
+      );
+
+      index++;
+      continue;
+    }
+
+    // Horizontal line
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+      flushParagraph();
+      flushList();
+      output.push("<hr>");
+      index++;
+      continue;
+    }
+
+    // Bullet list
+    const bullet = trimmed.match(/^[-*+]\s+(.+)$/);
+
+    if (bullet) {
+      flushParagraph();
+
+      if (listType !== "ul") {
+        flushList();
+        listType = "ul";
+      }
+
+      listItems.push(bullet[1]);
+      index++;
+      continue;
+    }
+
+    // Numbered list
+    const numbered = trimmed.match(/^\d+[.)]\s+(.+)$/);
+
+    if (numbered) {
+      flushParagraph();
+
+      if (listType !== "ol") {
+        flushList();
+        listType = "ol";
+      }
+
+      listItems.push(numbered[1]);
+      index++;
+      continue;
+    }
+
+    flushList();
+    paragraph.push(trimmed);
+    index++;
+  }
+
+  flushParagraph();
+  flushList();
+
+  return output.join("");
+}
+
+// ==============================
 // DISPLAY MESSAGE
+// ==============================
+
 function displayMessage(role, content) {
   welcome.hidden = true;
 
   const message = document.createElement("div");
-  message.className = `message ${role}`;
+  message.className = "message " + role;
 
   const avatar = document.createElement("div");
   avatar.className = "message-avatar";
@@ -126,7 +339,12 @@ function displayMessage(role, content) {
 
   const text = document.createElement("div");
   text.className = "message-text";
-  text.textContent = content;
+
+  if (role === "assistant") {
+    text.innerHTML = formatMarkdown(content);
+  } else {
+    text.textContent = content;
+  }
 
   messageContent.appendChild(name);
   messageContent.appendChild(text);
@@ -143,6 +361,7 @@ function displayMessage(role, content) {
       try {
         await navigator.clipboard.writeText(content);
         copyBtn.textContent = "Copied!";
+
         setTimeout(() => {
           copyBtn.textContent = "Copy response";
         }, 1500);
@@ -160,16 +379,21 @@ function displayMessage(role, content) {
   messages.appendChild(message);
 
   const container = document.querySelector(".chat-container");
-  container.scrollTop = container.scrollHeight;
+
+  if (container) {
+    container.scrollTop = container.scrollHeight;
+  }
 }
 
-// RENDER HISTORY
+// ==============================
+// CHAT HISTORY
+// ==============================
+
 function renderHistory() {
   historyList.innerHTML = "";
 
   if (conversations.length === 0) {
-    historyList.innerHTML =
-      '<p class="empty-history">No conversations yet</p>';
+    historyList.textContent = "No conversations yet";
     return;
   }
 
@@ -185,12 +409,12 @@ function renderHistory() {
     title.className = "history-name";
     title.textContent = chat.title;
 
-    title.addEventListener("click", () => openChat(chat.id));
-
     const deleteBtn = document.createElement("button");
     deleteBtn.className = "delete-chat";
     deleteBtn.textContent = "×";
     deleteBtn.title = "Delete conversation";
+
+    title.addEventListener("click", () => openChat(chat.id));
 
     deleteBtn.addEventListener("click", event => {
       event.stopPropagation();
@@ -198,7 +422,7 @@ function renderHistory() {
       if (!confirm("Delete this conversation?")) return;
 
       conversations = conversations.filter(
-        chatItem => chatItem.id !== chat.id
+        item => item.id !== chat.id
       );
 
       if (currentChatId === chat.id) {
@@ -220,7 +444,6 @@ function renderHistory() {
   });
 }
 
-// OPEN OLD CHAT
 function openChat(id) {
   const chat = conversations.find(item => item.id === id);
 
@@ -238,11 +461,25 @@ function openChat(id) {
   sidebar.classList.remove("open");
 }
 
+function newChat() {
+  currentChatId = null;
+  messages.innerHTML = "";
+  welcome.hidden = false;
+  messageInput.value = "";
+
+  renderHistory();
+  sidebar.classList.remove("open");
+}
+
+// ==============================
 // SEND MESSAGE
+// ==============================
+
 async function sendMessage(text) {
   if (isSending) return;
 
   text = text.trim();
+
   if (!text) return;
 
   if (!currentChatId) {
@@ -260,7 +497,10 @@ async function sendMessage(text) {
   typing.hidden = false;
 
   const container = document.querySelector(".chat-container");
-  container.scrollTop = container.scrollHeight;
+
+  if (container) {
+    container.scrollTop = container.scrollHeight;
+  }
 
   try {
     const chat = getCurrentChat();
@@ -314,35 +554,34 @@ async function sendMessage(text) {
   }
 }
 
-// FORM SUBMIT
+// ==============================
+// EVENT LISTENERS
+// ==============================
+
 chatForm.addEventListener("submit", event => {
   event.preventDefault();
   sendMessage(messageInput.value);
 });
 
-// NEW CHAT
 newChatBtn.addEventListener("click", newChat);
 
-// SUGGESTIONS
 document.querySelectorAll(".suggestion").forEach(button => {
   button.addEventListener("click", () => {
     sendMessage(button.dataset.prompt);
   });
 });
 
-// MOBILE MENU
 menuBtn.addEventListener("click", () => {
   sidebar.classList.toggle("open");
 });
 
-// AUTO RESIZE
 messageInput.addEventListener("input", () => {
   messageInput.style.height = "auto";
+
   messageInput.style.height =
     Math.min(messageInput.scrollHeight, 130) + "px";
 });
 
-// ENTER TO SEND
 messageInput.addEventListener("keydown", event => {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
@@ -350,7 +589,10 @@ messageInput.addEventListener("keydown", event => {
   }
 });
 
-// RESTORE LAST CONVERSATION
+// ==============================
+// INITIALIZE
+// ==============================
+
 function initializeApp() {
   renderHistory();
 
@@ -359,6 +601,5 @@ function initializeApp() {
   }
 }
 
-// START
 initializeApp();
-    
+        
